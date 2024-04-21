@@ -1,21 +1,23 @@
 'use server';
 
+import { signIn } from "@/auth";
 import { sql } from "@vercel/postgres";
+import { AuthError } from "next-auth";
 import { revalidatePath } from 'next/cache';
 import { redirect } from "next/navigation";
 import { z } from 'zod';
 
 const FormSchema = z.object( {
   id: z.string(),
-  customerId: z.string({
-    invalid_type_error: 'Please select a customer.',
-  }),
+  customerId: z.string( {
+    invalid_type_error: 'Please select a customer.'
+  } ),
   amount: z.coerce
     .number()
-    .gt(0, { message: 'Please enter an amount greater than $0.' }),
-  status: z.enum(['pending', 'paid'], {
-    invalid_type_error: 'Please select an invoice status.',
-  }),
+    .gt( 0, { message: 'Please enter an amount greater than $0.' } ),
+  status: z.enum( [ 'pending', 'paid' ], {
+    invalid_type_error: 'Please select an invoice status.'
+  } ),
   date: z.string()
 } );
 const UpdateInvoice = FormSchema.omit( { id: true, date: true } );
@@ -32,22 +34,22 @@ export type State = {
 };
 
 export async function createInvoice( prevState: State, formData: FormData ) {
-  const validatedFields = CreateInvoice.safeParse({
-    customerId: formData.get('customerId'),
-    amount: formData.get('amount'),
-    status: formData.get('status'),
-  });
+  const validatedFields = CreateInvoice.safeParse( {
+    customerId: formData.get( 'customerId' ),
+    amount: formData.get( 'amount' ),
+    status: formData.get( 'status' )
+  } );
 
-  if (!validatedFields.success) {
+  if( !validatedFields.success ) {
     return {
       errors: validatedFields.error.flatten().fieldErrors,
-      message: 'Missing Fields. Failed to Create Invoice.',
+      message: 'Missing Fields. Failed to Create Invoice.'
     };
   }
 
   const { customerId, amount, status } = validatedFields.data;
   const amountInCents = amount * 100;
-  const date = new Date().toISOString().split('T')[0];
+  const date = new Date().toISOString().split( 'T' )[0];
 
   try {
     await sql`
@@ -68,18 +70,18 @@ export async function createInvoice( prevState: State, formData: FormData ) {
 export async function updateInvoice(
   id: string,
   prevState: State,
-  formData: FormData,
+  formData: FormData
 ) {
-  const validatedFields = UpdateInvoice.safeParse({
-    customerId: formData.get('customerId'),
-    amount: formData.get('amount'),
-    status: formData.get('status'),
-  });
+  const validatedFields = UpdateInvoice.safeParse( {
+    customerId: formData.get( 'customerId' ),
+    amount: formData.get( 'amount' ),
+    status: formData.get( 'status' )
+  } );
 
-  if (!validatedFields.success) {
+  if( !validatedFields.success ) {
     return {
       errors: validatedFields.error.flatten().fieldErrors,
-      message: 'Missing Fields. Failed to Update Invoice.',
+      message: 'Missing Fields. Failed to Update Invoice.'
     };
   }
 
@@ -92,12 +94,12 @@ export async function updateInvoice(
       SET customer_id = ${customerId}, amount = ${amountInCents}, status = ${status}
       WHERE id = ${id}
     `;
-  } catch (error) {
+  } catch( error ) {
     return { message: 'Database Error: Failed to Update Invoice.' };
   }
 
-  revalidatePath('/dashboard/invoices');
-  redirect('/dashboard/invoices');
+  revalidatePath( '/dashboard/invoices' );
+  redirect( '/dashboard/invoices' );
 }
 
 export async function deleteInvoice( id: string ) {
@@ -108,5 +110,24 @@ export async function deleteInvoice( id: string ) {
     return { message: 'Deleted Invoice.' };
   } catch( error ) {
     return { message: `'Database Error: Failed to Delete Invoice (#${ id }).'` };
+  }
+}
+
+export async function authenticate(
+  prevState: string | undefined,
+  formData: FormData
+) {
+  try {
+    await signIn( 'credentials', formData );
+  } catch( error ) {
+    if( error instanceof AuthError ) {
+      switch( error.type ) {
+        case 'CredentialsSignin':
+          return 'Invalid Credentials.';
+        default:
+          return 'Something went wrong.';
+      }
+    }
+    throw error;
   }
 }
